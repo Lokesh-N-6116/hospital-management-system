@@ -92,3 +92,28 @@ ORDER BY di.severity DESC;
 SELECT log_id, created_at, action, target_table, target_id, ip_address, details
 FROM audit_logs
 ORDER BY created_at DESC LIMIT 10;
+
+-- ====================================================================
+-- SECTION 13: HOW TO DEMONSTRATE DATABASE TRIGGERS TO EXAMINERS
+-- ====================================================================
+
+-- A. List all installed triggers in the database
+SHOW TRIGGERS\G
+
+-- B. Test Trigger 1: Immutable Prescriptions (BEFORE DELETE)
+-- Expected Result: MySQL throws error 45000 and blocks the delete!
+DELETE FROM prescriptions WHERE prescription_id = 1;
+
+-- C. Test Trigger 2: Physiological Vitals Sanity Check (BEFORE INSERT)
+-- Expected Result: Fails because Diastolic BP (120) > Systolic BP (80)
+INSERT INTO patient_vitals (patient_id, recorded_by_nurse_id, systolic_bp, diastolic_bp) 
+VALUES (1, 4, 80, 120);
+
+-- D. Test Trigger 3: Automated Audit Log on Status Change (AFTER UPDATE)
+-- Step 1: Update an appointment status
+UPDATE appointments SET status = 'completed' WHERE appointment_id = 2;
+-- Step 2: Show that the trigger automatically logged this event into audit_logs!
+SELECT * FROM audit_logs 
+WHERE action = 'TRIGGER_APPOINTMENT_STATUS_CHANGE' 
+ORDER BY log_id DESC LIMIT 1\G
+

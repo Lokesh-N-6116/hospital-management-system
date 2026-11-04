@@ -320,3 +320,50 @@ CREATE TABLE audit_logs (
     INDEX idx_audit_action (action),
     INDEX idx_audit_created_at (created_at)
 ) ENGINE=InnoDB;
+
+-- ====================================================================
+-- TRIGGERS: Event-Driven Database Integrity & Automated Auditing
+-- ====================================================================
+
+DELIMITER $$
+-- TRIGGER 1: Prevent Hard Deletion of Prescriptions (Legal Immutability)
+CREATE TRIGGER trg_prevent_prescription_hard_delete
+BEFORE DELETE ON prescriptions
+FOR EACH ROW
+BEGIN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'Prescriptions are legally immutable and cannot be hard deleted. Use soft deactivation.';
+END$$
+
+-- TRIGGER 2: Physiological Sanity Validation on Vitals (Systolic > Diastolic)
+CREATE TRIGGER trg_validate_vitals_before_insert
+BEFORE INSERT ON patient_vitals
+FOR EACH ROW
+BEGIN
+    IF NEW.systolic_bp IS NOT NULL AND NEW.diastolic_bp IS NOT NULL THEN
+        IF NEW.systolic_bp <= NEW.diastolic_bp THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Clinical Error: Systolic blood pressure must be strictly greater than diastolic.';
+        END IF;
+    END IF;
+END$$
+
+-- TRIGGER 3: Automated Audit Log on Appointment Status Changes
+CREATE TRIGGER trg_after_appointment_status_update
+AFTER UPDATE ON appointments
+FOR EACH ROW
+BEGIN
+    IF OLD.status <> NEW.status THEN
+        INSERT INTO audit_logs (user_id, action, target_table, target_id, ip_address, details)
+        VALUES (
+            NEW.scheduled_by_staff_id,
+            'TRIGGER_APPOINTMENT_STATUS_CHANGE',
+            'appointments',
+            NEW.appointment_id,
+            '127.0.0.1',
+            CONCAT('Status automatically transitioned from [', OLD.status, '] to [', NEW.status, ']')
+        );
+    END IF;
+END$$
+DELIMITER ;
+
